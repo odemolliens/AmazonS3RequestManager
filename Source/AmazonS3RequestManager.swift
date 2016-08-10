@@ -209,7 +209,7 @@ public class AmazonS3RequestManager {
         acl: AmazonS3ACL? = nil,
         metaData:[String : String]? = nil,
         storageClass: AmazonS3StorageClass = .Standard) -> Request {
-            let putRequest = requestSerializer.amazonURLRequest(.PUT,
+        let putRequest = requestSerializer.amazonURLRequest(.PUT,fileURL:fileURL,
                 path: destinationPath,
                 acl: acl,
                 metaData: metaData,

@@ -9,7 +9,6 @@
 import Foundation
 
 import Alamofire
-import SWXMLHash
 
 extension Request {
   

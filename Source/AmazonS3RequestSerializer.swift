@@ -26,8 +26,8 @@ public class AmazonS3RequestSerializer {
     // MARK: - Instance Properties
     
     /**
-    The Amazon S3 Bucket for the client
-    */
+     The Amazon S3 Bucket for the client
+     */
     public var bucket: String?
     
     /**
@@ -66,15 +66,15 @@ public class AmazonS3RequestSerializer {
     // MARK: - Initialization
     
     /**
-    Initalizes an `AmazonS3RequestSerializer` with the given Amazon S3 credentials.
-    
-    - parameter bucket:    The Amazon S3 bucket for the client
-    - parameter region:    The Amazon S3 region for the client
-    - parameter accessKey: The Amazon S3 access key ID for the client
-    - parameter secret:    The Amazon S3 secret for the client
-    
-    - returns: An `AmazonS3RequestSerializer` with the given Amazon S3 credentials
-    */
+     Initalizes an `AmazonS3RequestSerializer` with the given Amazon S3 credentials.
+     
+     - parameter bucket:    The Amazon S3 bucket for the client
+     - parameter region:    The Amazon S3 region for the client
+     - parameter accessKey: The Amazon S3 access key ID for the client
+     - parameter secret:    The Amazon S3 secret for the client
+     
+     - returns: An `AmazonS3RequestSerializer` with the given Amazon S3 credentials
+     */
     public init(accessKey: String, secret: String, region: AmazonS3Region, bucket: String? = nil) {
         self.accessKey = accessKey
         self.secret = secret
@@ -92,33 +92,40 @@ public class AmazonS3RequestSerializer {
      - parameter method:        The HTTP method for the request. For more information see `Alamofire.Method`.
      - parameter path:          The desired path, including the file name and extension, in the Amazon S3 Bucket.
      - parameter subresource:   The subresource to be added to the request's query. A subresource can be used to access
-                                options or properties of a resource.
-     - parameter acl:           The optional access control list to set the acl headers for the request. For more 
-                                information see `AmazonS3ACL`.
+     options or properties of a resource.
+     - parameter acl:           The optional access control list to set the acl headers for the request. For more
+     information see `AmazonS3ACL`.
      - parameter metaData:      An optional dictionary of meta data that should be assigned to the object to be uploaded.
-     - parameter storageClass:  The optional storage class to use for the object to upload. If none is specified, 
-                                standard is used. For more information see `AmazonS3StorageClass`.
+     - parameter storageClass:  The optional storage class to use for the object to upload. If none is specified,
+     standard is used. For more information see `AmazonS3StorageClass`.
      
      - returns: An `NSURLRequest`, serialized for use with the Amazon S3 service.
      */
     public func amazonURLRequest(method: Alamofire.Method,
-        path: String? = nil,
-        subresource: String? = nil,
-        acl: AmazonS3ACL? = nil,
-        metaData:[String : String]? = nil,
-        storageClass: AmazonS3StorageClass = .Standard) -> NSURLRequest {
-            let url = requestURL(path, subresource: subresource)
-            
-            var mutableURLRequest = NSMutableURLRequest(URL: url)
-            mutableURLRequest.HTTPMethod = method.rawValue
-            
-            setContentType(forRequest: &mutableURLRequest)
-            acl?.setACLHeaders(forRequest: &mutableURLRequest)
-            setStorageClassHeaders(storageClass, forRequest: &mutableURLRequest)
-            setMetaDataHeaders(metaData, forRequest: &mutableURLRequest)
-            setAuthorizationHeaders(forRequest: &mutableURLRequest)
-            
-            return mutableURLRequest
+                                 fileURL: NSURL? = nil,
+                                 path: String? = nil,
+                                 subresource: String? = nil,
+                                 acl: AmazonS3ACL? = nil,
+                                 metaData:[String : String]? = nil,
+                                 storageClass: AmazonS3StorageClass = .Standard) -> NSURLRequest {
+        let url = requestURL(path, subresource: subresource)
+        
+        var mutableURLRequest = NSMutableURLRequest(URL: url)
+        mutableURLRequest.HTTPMethod = method.rawValue
+        
+        
+        setMd5(forRequest: &mutableURLRequest, fileURL: fileURL)
+        
+        setContentLength(forRequest: &mutableURLRequest, fileURL: fileURL)
+        setContentType(forRequest: &mutableURLRequest)
+        
+        acl?.setACLHeaders(forRequest: &mutableURLRequest)
+        setStorageClassHeaders(storageClass, forRequest: &mutableURLRequest)
+        
+        setMetaDataHeaders(metaData, forRequest: &mutableURLRequest)
+        setAuthorizationHeaders(forRequest: &mutableURLRequest)
+        
+        return mutableURLRequest
     }
     
     private func requestURL(path: String?, subresource: String?) -> NSURL {
@@ -151,24 +158,54 @@ public class AmazonS3RequestSerializer {
         return NSURL(string: URLString)!
     }
     
+    private func setMd5(inout forRequest request: NSMutableURLRequest, fileURL: NSURL?) {
+        
+        if let path:String = fileURL?.path {
+            let md5 = FileHash.md5HashOfFileAtPath(path)
+            let base64String = FileHash.md5AmazonAWS(md5)
+            
+            request.setValue(base64String, forHTTPHeaderField: "Content-MD5")
+        }
+        
+    }
+    
     private func setContentType(inout forRequest request: NSMutableURLRequest) {
         let contentTypeString = MIMEType(request) ?? "application/octet-stream"
         
         request.setValue(contentTypeString, forHTTPHeaderField: "Content-Type")
     }
     
+    
+    private func setContentLength(inout forRequest request: NSMutableURLRequest, fileURL: NSURL?) {
+        
+        if let path:String = fileURL?.path {
+            
+            if  NSFileManager.defaultManager().fileExistsAtPath(path){
+                
+                do {
+                    let attr: NSDictionary = try NSFileManager.defaultManager().attributesOfItemAtPath(path)
+                    request.setValue(String(attr.fileSize()), forHTTPHeaderField: "Content-Length")
+                } catch {
+                    print(error)
+                }
+                
+            }
+        }
+        
+    }
+    
     private func MIMEType(request: NSURLRequest) -> String? {
         if let fileExtension = request.URL?.pathExtension where !fileExtension.isEmpty,
             let UTIRef = UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, fileExtension, nil),
             MIMETypeRef = UTTypeCopyPreferredTagWithClass(UTIRef.takeUnretainedValue(), kUTTagClassMIMEType) {
-                
-                UTIRef.release()
-                
-                let MIMEType = MIMETypeRef.takeUnretainedValue()
-                MIMETypeRef.release()
-                
-                return MIMEType as String
-                
+            
+            UTIRef.release()
+            
+            let MIMEType = MIMETypeRef.takeUnretainedValue()
+            MIMETypeRef.release()
+            
+            return MIMEType as String
+            
         }
         return nil
     }
@@ -183,8 +220,8 @@ public class AmazonS3RequestSerializer {
         let timestamp = currentTimeStamp()
         
         let signature = AmazonS3SignatureHelpers.AWSSignatureForRequest(request,
-            timeStamp: timestamp,
-            secret: secret)
+                                                                        timeStamp: timestamp,
+                                                                        secret: secret)
         
         request.setValue(timestamp ?? "", forHTTPHeaderField: "Date")
         request.setValue("AWS \(accessKey):\(signature)", forHTTPHeaderField: "Authorization")
