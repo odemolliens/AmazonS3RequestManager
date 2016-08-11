@@ -114,7 +114,7 @@ public class AmazonS3RequestSerializer {
         mutableURLRequest.HTTPMethod = method.rawValue
         
         
-        setMd5(forRequest: &mutableURLRequest, fileURL: fileURL)
+        //setMd5(forRequest: &mutableURLRequest, fileURL: fileURL)
         
         setContentLength(forRequest: &mutableURLRequest, fileURL: fileURL)
         setContentType(forRequest: &mutableURLRequest)
